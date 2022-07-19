@@ -1,0 +1,398 @@
+---
+title: "Death-Rate Estimation"
+author: "Shreyas Gupta"
+date: '2022-07-17'
+output: html_document
+---
+```{r, echo=TRUE, warning=FALSE}
+
+library(readxl)
+Altersverteilung <- as.data.frame(read_excel("Altersverteilung.xlsx", 
+    sheet = "Fallzahlen"))
+
+Todesfaelle <- as.matrix(read_excel("COVID-19_Todesfaelle.xlsx",sheet = "COVID_Todesfälle_KW_AG10" , ))
+
+for(k in 1:119){
+  for(l in 1:12){
+    if(Todesfaelle[k,l] == "<4"){
+       Todesfaelle[k,l] = 2
+    }
+    Todesfaelle[k,l] = as.numeric(Todesfaelle[k,l])
+  }
+}  
+
+```
+
+
+Mege and order both data frames in order to receive homogenous data set
+of death ratios for each age group
+
+
+```{r}
+
+row.names(Altersverteilung) <- Altersverteilung[,1]
+Altersverteilung <- as.matrix(Altersverteilung[-1,][,-1])
+Altersverteilung <- Altersverteilung[,-(dim(Altersverteilung)[2]:(dim(Altersverteilung)[2]-1))]
+
+X <- matrix(0, nrow = 10, ncol = 119)
+rownames(X) <- rev(c("0-9","10-19","20-29","30-39","40-49","50-59","60-69","70-79","80-89","90+"))
+colnames(X) <- colnames(Altersverteilung)
+X[1,] <- Altersverteilung[1,] 
+
+```
+
+Defining Y as Death Count and X as Infections:
+Combining the age group to 10 year sequences: Adhering to the death-dataset.
+
+````{r}
+k <- 1
+for (i in seq(2,19,2)){
+  
+  k = k+1
+    
+  X[k,] <- Altersverteilung[i,]+ Altersverteilung[(i+1),]
+  
+}
+
+```
+
+X is now the new Age distribution for cases over the period of the pandemic.
+
+
+```{r, include=TRUE}
+
+Y <- Todesfaelle[,-(1:2)]
+Y <- apply(Y, 2, as.numeric)
+Y <- t(Y)
+
+rownames(Y) <- rownames(X)
+colnames(Y) <- colnames(X)
+```
+
+Now, both, *Todesfaelle* and *Fallzahl*, are now the same mode and the same dimension. 
+
+
+Bayesian Estimation
+-------------------
+
+
+Calculating the Ratios per Age-Group over all time at first. Afterwards regardig the different time-periods 
+and measures taken for each age group. 
+
+```{r}
+X_sum <- apply(X, 1, sum)
+Y_sum <- apply(Y, 1, sum)
+
+d_ratios <- Y_sum/X_sum
+```
+
+
+Now modeling the deaths as a Binomial Model regarding Infections:
+
+  \item Setting a Prior \rightarrow Beta Prior as Conjugate for Binomial
+  \Naming the Likelihood
+
+```{r}
+
+plot(dbeta(x = seq(0,1, le=100),shape1 = 2, shape2 = 40))
+
+alpha_0 <- 2
+beta_0 <- 5
+
+bayes_estimate <- (Y_sum + alpha_0)/(X_sum + alpha_0 + beta_0)
+
+comparison_frame <- data.frame(bayesestimate = bayes_estimate,ratio = d_ratios, cases = X_sum) 
+
+```
+
+```{r, echo=F, warning=FALSE}
+library(ggplot2)
+```
+
+```{r}
+
+ggplot(data = comparison_frame, aes(x = log(ratio), y = log(bayes_estimate), colour = log(cases)))+
+  geom_point()+
+  geom_abline(lty = 2, col= "red", lwd= .2)+
+  geom_text(
+    label=rownames(comparison_frame),
+    check_overlap = F, 
+    size = 3,
+    nudge_x = -0.05, nudge_y = 0.15, 
+  )
+
+
+```
+
+Now performing same estimation with different data window.
+
+Covid Wave 1 
+2020 Week 10 - Week 19
+
+```{r}
+
+X_1Wave <- X[,1:10]
+Y_1Wave <- Y[,1:10]
+
+X_sum1W <- apply(X_1Wave, 1, sum)
+Y_sum1W <- apply(Y_1Wave, 1, sum)
+
+d_ratios_1W <- Y_sum1W/X_sum1W
+
+
+bayes_estimate_1W <- (Y_sum1W + alpha_0)/(X_sum1W + alpha_0 + beta_0)
+comparison_frame_1W <- data.frame(bayesestimate1W = bayes_estimate_1W,ratio1W = d_ratios_1W, cases = X_sum1W) 
+
+```
+
+
+Plotting differences
+
+```{r}
+
+ggplot(data = comparison_frame_1W, aes(x = log(ratio1W), y = log(bayesestimate1W),colour = log(cases)))+
+  geom_point()+
+  geom_abline(lty = 2, col= "red", lwd= .2)+
+  geom_text(
+    label=rownames(comparison_frame_1W),
+    check_overlap = F, 
+    size = 3,
+    nudge_x = -0.05, nudge_y = 0.15, 
+  )+
+  xlim(-11,0)+
+  ylim(-9,-1)
+
+  
+
+summary(comparison_frame_1W)
+```
+
+Now downphase: from 2020 Week 20 - Week 45
+
+```{r}
+X_1Down <- X[,11:36]
+Y_1Down <- Y[,11:36]
+
+X_sum1D <- apply(X_1Down, 1, sum)
+Y_sum1D <- apply(Y_1Down, 1, sum)
+
+d_ratios_1D <- Y_sum1D/X_sum1D
+
+
+bayes_estimate_1D <- (Y_sum1D + alpha_0)/(X_sum1D + alpha_0 + beta_0)
+comparison_frame_1D <- data.frame(bayesestimate1D = bayes_estimate_1D,ratio1D = d_ratios_1D, cases = X_sum1D) 
+
+```
+
+```{r}
+ggplot(data = comparison_frame_1D, aes(x = log(ratio1D), y = log(bayesestimate1D),colour = log(cases)))+
+  geom_point()+
+  geom_abline(lty = 2, col= "red", lwd= .2)+
+  geom_text(
+    label=rownames(comparison_frame_1D),
+    check_overlap = F, 
+    size = 3,
+    nudge_x = -0.05, nudge_y = 0.15, 
+  )+
+  xlim(-11,0)+
+  ylim(-9,-1)
+
+  
+
+```
+
+2 Wave 2020 Week 46 - 2021 Week 9
+
+```{r}
+X_2Wave <- X[,37:53]
+Y_2Wave <- Y[,37:53]
+
+X_sum2W <- apply(X_2Wave, 1, sum)
+Y_sum2W <- apply(Y_2Wave, 1, sum)
+
+d_ratios_2W <- Y_sum2W/X_sum2W
+
+
+bayes_estimate_2W <- (Y_sum2W + alpha_0)/(X_sum2W + alpha_0 + beta_0)
+comparison_frame_2W <- data.frame(bayesestimate2W = bayes_estimate_2W,ratio2W = d_ratios_2W, cases = X_sum2W) 
+
+```
+
+Plot
+
+```{r}
+ggplot(data = comparison_frame_2W, aes(x = log(ratio2W), y = log(bayesestimate2W),colour = log(cases)))+
+  geom_point()+
+  geom_abline(lty = 2, col= "red", lwd= .2)+
+  geom_text(
+    label=rownames(comparison_frame_2W),
+    check_overlap = F, 
+    size = 3,
+    nudge_x = -0.05, nudge_y = 0.15, 
+  )+
+  xlim(-11,0)+
+  ylim(-9,-1)
+
+  
+```
+
+
+MCMCM scheme: different Priors
+------------------------------
+
+
+Using MCMC and Metropolis Hastings Algorithm to implement uniform(beta) uninformative prior
+
+Using the data defined in the first wave and evaluating posterior for age group 0-9 :
+
+```{r}
+
+X_1Wave <- X[,1:10]; Y_1Wave <- Y[,1:10]
+X_sum1W <- apply(X_1Wave, 1, sum); Y_sum1W <- apply(Y_1Wave, 1, sum)
+
+
+proposal_frame <- data.frame(Infections = X_sum1W, Deaths = Y_sum1W)
+```
+Age Group data:
+```{r}
+group1_dframe <- c(rep(1,proposal_frame[10,2]),rep(0,proposal_frame[10,1]))
+group2_dframe <- c(rep(1,proposal_frame[9,2]),rep(0,proposal_frame[9,1]))
+group3_dframe <- c(rep(1,proposal_frame[8,2]),rep(0,proposal_frame[8,1]))
+group4_dframe <- c(rep(1,proposal_frame[7,2]),rep(0,proposal_frame[7,1]))
+group5_dframe <- c(rep(1,proposal_frame[6,2]),rep(0,proposal_frame[6,1]))
+group6_dframe <- c(rep(1,proposal_frame[5,2]),rep(0,proposal_frame[5,1]))
+group7_dframe <- c(rep(1,proposal_frame[4,2]),rep(0,proposal_frame[4,1]))
+group8_dframe <- c(rep(1,proposal_frame[3,2]),rep(0,proposal_frame[3,1]))
+group9_dframe <- c(rep(1,proposal_frame[2,2]),rep(0,proposal_frame[2,1]))
+group10_dframe <- c(rep(1,proposal_frame[1,2]),rep(0,proposal_frame[1,1]))
+
+```
+
+
+
+
+Implementation with non-imformative uniform prior
+
+````{r}
+n.sims <- 1000 #number simulations
+theta_0 <- runif(1, min = 0, max = .5)
+theta_vec <- rep(0, n.sims+1) #create posterior vector
+theta_vec[1] <- theta_0 #initialize posterior vector
+
+for (t in 1:n.sims){
+
+  theta_star <- runif(1, min = 0, max = .5) #proposal from prior    
+  theta_t <- theta_vec[t] #previous accepted value for posterior  
+  
+  #Create MH-Ratio using log-likelihoods
+  
+  MH_Ratio <- sum(dbinom(group1_dframe, size = 1, log = T, prob = theta_star))/
+    sum(dbinom(group1_dframe, size = 1, log = T, prob = theta_t))
+  
+  #sample with MH ratio
+  
+  mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+  
+  theta_vec[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+}  
+
+hist(theta_vec)
+
+```
+
+Implementation with beta prior
+
+```{r}
+
+
+n.sims <- 10000 #number simulations
+theta_0 <- rbeta(n = 1, shape1 = alpha_0,shape2 = beta_0)
+theta_vec <- rep(0, n.sims+1) #create posterior vector
+theta_vec[1] <- theta_0 #initialize posterior vector
+
+for (t in 1:n.sims){
+
+  theta_star <- rbeta(n = 1, shape1 = alpha_0,shape2 = beta_0)#proposal from prior    
+  theta_t <- theta_vec[t] #previous accepted value for posterior  
+  
+  #Create MH-Ratio using log-likelihoods
+  
+  MH_Ratio <- dbinom(group1_dframe, size = 1, log = T, prob = theta_star)/
+    dbinom(group1_dframe, size = 1, log = T, prob = theta_t)
+  
+  #sample with MH ratio
+  
+  mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+  
+  theta_vec[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+}  
+
+hist(theta_vec)
+quantile(x = theta_vec, probs = c(0.2, 0.8))
+mean(theta_vec)
+```
+
+Definiing a function for all age groups
+```{r}
+
+wrapper_MH_posterior <- function(n.sims = 1000, alpha_0 = 2, beta_0 = 20, data_frame){
+  
+  theta_0 <- rbeta(n = 1, shape1 = alpha_0,shape2 = beta_0)
+  theta_vec <- rep(0, n.sims +1) #create posterior vector
+  theta_vec[1] <- theta_0 #initialize posterior vector
+  
+  for (t in 1:n.sims){
+  
+    theta_star <- rbeta(n = 1, shape1 = alpha_0,shape2 = beta_0)#proposal from prior    
+    theta_t <- theta_vec[t] #previous accepted value for posterior  
+    
+    #Create MH-Ratio using log-likelihoods
+    
+    MH_Ratio <- sum(dbinom(data_frame, size = 1, log = T, prob = theta_star))/
+      sum(dbinom(data_frame, size = 1, log = T, prob = theta_t))
+    
+    #sample with MH ratio
+    
+    mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+    
+    theta_vec[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+  }  
+ 
+  hist(theta_vec, probability = T)
+  lines(dbeta(x = seq(0,1, le=1000), shape1 = alpha_0, shape2 = beta_0))
+  
+  plot(theta_vec, type = "l", main = "data_frame")
+  #return(list(posterior = theta_vec, quantiles = quantile(theta_vec, probs = c(0.1,0.9)), mean_posterior = mean(theta_vec)))
+}
+
+wrapper_MH_posterior(data_frame = group2_dframe, alpha_0 = 2 ,beta_0 = 20, n.sims = 1000)
+
+mean(group2_dframe)
+
+2/22
+
+
+```
+
+
+plotting the posterior distributions for all age group
+```{r}
+
+age_frames_names <- list(group1_dframe,group2_dframe,group3_dframe,group4_dframe,
+                               group5_dframe,group6_dframe,group7_dframe,group8_dframe,
+                               group9_dframe,group10_dframe)
+
+
+plots <- NULL
+k=0
+for (i in age_frames_names){
+  k <- k+1
+  plots[k] <- wrapper_MH_posterior(data_frame = i, n.sims = 1000, alpha_0 = 2, beta_0 = 25)
+  
+}
+
+
+```
+
+Comparison of normal estimation and MH algorithm for age group 0-9
+

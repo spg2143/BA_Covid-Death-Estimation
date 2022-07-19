@@ -1,0 +1,224 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+Data Reading and Data Cleansing. One: need the cumulated cases numbers of each county.
+Sercond: Time Series of specific interesting counties because if Bayesian Filtering are important
+
+```{r}
+
+data = read.csv(file = "RKI_Corona_Landkreise.csv", header = TRUE,sep = ",", dec = ".")
+colnames(data)
+
+View(data)
+```
+
+Using Bayes Estimation, with beta Prior and 
+
+
+Conjugate prior Berechnung
+```{r}
+
+plot(dbeta(seq(0,1,le=100), shape1 = 100, shape2 = 50))
+
+log(bayes_estimate)[order(log(bayes_estimate))][1]
+
+bayes_estimate = (data.est$deaths + 100)/(data.est$cases+ 150)
+data.est[,5] = bayes_estimate
+library(ggplot2)
+ggplot(data = data.est)+
+  geom_point(mapping = aes(log(ratio), log(bayes_estimate), colour = log(cases)))+
+  geom_abline(lty=2, lwd= .3, col= "red")
+ 
+
+```
+mit bundesländern
+mit verschiedenen prior 
+credibility intervals 
+mcmc unterscheidlich priors
+nochmal gibbs anschauen 
+probleme von bayes
+vorteile von bayes
+Zeiteinteilung vom datensazu genommen vom dashboard \rightarrow kleinere datensätze in          krisengebieten als beispiel
+Analyse für bundesländer 
+credebilität dafür 
+simulation mit anderen datensätzen 
+vergleiche mit anderen ländern + politischer vergleich und geographhische einschätzung
+
+```{r}
+
+library(fitdistrplus)
+plot(fitdistrplus::fitdist(data = X, distr = "gamma", method = "mm"))
+
+```
+
+
+
+MCMC
+```{r}
+#trying out different priors ##Flensburg 
+dbinom(x = X, size = 1, prob = 0.5)
+
+?dbinom
+Görlitz = data.est[358,]
+
+X = c(rep(exp(-1),round(1641/1000,0)), rep(1, round(89942/1000,0)))
+hist(X)
+
+
+qnorm(0.99, mean = 0.5, sd = 0.2)
+
+plot(dnorm(x = seq(0,1, le=100), mean = .5, sd = .214))
+
+n.sim = 10
+theta_0 = rnorm(n = 1,mean = .005, sd = .001)
+theta_vec = rep(0, n.sim+2)
+theta_vec[1] = theta_0
+mh_ratio = rep(0, n.sim+2)
+mh_ratio[1] = .5
+
+for (t in 1:(n.sim+1)){
+  theta_star = rnorm(n = 1,mean = .005, sd = .001)
+  theta_t = theta_vec[t]
+  
+  ##MH
+  
+  mh_ratio[t+1] =prod(dbinom(X, size = 1, prob = theta_star, log = TRUE))/prod(dbinom(X, size = 1, prob = theta_t, log = TRUE))
+
+    
+  if(is.infinite(mh_ratio[t+1]) | is.na(mh_ratio[t+1])){
+   mh_ratio[t+1] = mh_ratio[t]
+  }
+  
+  #sample
+  prob_vec = c(min(1, mh_ratio[t+1]), 1-min(1,mh_ratio[t+1]))
+  theta_vec[t+1] = sample(c(theta_star, theta_t), size = 1, prob = prob_vec)
+  
+}
+  
+hist(theta_vec)
+hist(mh_ratio)  
+    
+mh_ratio[3] = Inf
+ if(is.infinite(mh_ratio[2+1]) | is.na(mh_ratio[2+1])){
+   mh_ratio[2+1] = mh_ratio[2]
+  }
+
+is.na(mh_ratio[2]); is.infinite(mh_ratio[1+1])
+
+isna
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+data.est = data.frame(data$GEN, data$deaths, data$cases)
+data.est [,4] = data.est[,2]/data.est[,3]
+
+colnames(data.est) = c("county", "deaths", "cases", "ratio")
+
+
+hist(data.est[,4], breaks = 20)
+
+library(fitdistrplus)
+
+estimate = fitdist(data.est[,4], distr = "beta", discrete = F)
+est = fitdist(data.est[,4], distr = "binom", discrete = TRUE)
+plot(estimate)
+
+alpha0 = estimate$estimate[1]
+beta0 = estimate$estimate[2]
+
+log(qbeta(0.05, shape1 = alpha0, shape2 = beta0))
+log(qbeta(0.95, shape1 = alpha0, shape2 = beta0))
+
+
+
+alpha0/(alpha0 + beta0)
+
+
+
+bayes_estimate = (data.est$deaths + alpha0)/(data.est$cases + alpha0 + beta0)
+
+data.est[,5] = bayes_estimate
+
+
+colnames(data.est) = c("county", "deaths", "cases", "ratio", "bayes_estimate")
+
+attach(data.est)
+
+
+plot(log(ratio), log(bayes_estimate), cex = 0.1)
+
+ggplot(data = data.est)+
+  geom_point(mapping = aes(log(ratio), log(bayes_estimate), colour = log(cases)))
+  
+
+install.packages("StanMoMo")
+library(StanMoMo, ggplot2)
+StanMoMo::FRMaleData
+
+```
+```{r}
+
+diff = log(abs(data.est$ratio- data.est$bayes_estimate))
+
+order(diff, decreasing = T )[1]
+data[381, ]
+
+data.est[381,]
+
+hist(diff)
+plot(log(data.est$ratio[diff< -11|diff> -10]), log(data.est$bayes_estimate[diff< -12|diff> -9]))
+
+
+library(ggplot2)
+
+ggplot(data = data.est[diff< -12|diff> -10,])+
+  geom_point(mapping = aes(log(ratio), log(bayes_estimate), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "Comparison: Bayes estimate - Ratio of deaths", fill = "N log cases") 
+
+
+
+
+
+ggplot(data = data.est)+
+  geom_point(mapping = aes(log(ratio), log(bayes_estimate), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "Comparison: Bayes estimate - Ratio of deaths", fill = "N log cases")
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+
+hist(data.est$ratio)
+
+plot(estimate)
+
+
+```
+Try to model each state differently. Need the time series. Maybe Zero inflated poisson? Or binary distribution
