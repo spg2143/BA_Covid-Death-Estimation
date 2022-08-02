@@ -22,6 +22,19 @@ gender <- c("M", "W", "unbekannt")
 Data$Refdatum = as.Date(Data$Ref, format = "%Y-%m-%d")
 ```
 
+The function takes input as:
+
+data = which data, Bundeslaender = chceks if states are required,
+Bundesland_Klasse = Which state is required, Landkreise = checks is counties are desired,
+Landkreis_Klasse = selects county,Geschlechts_Klasse = Checks which gender, Alter_Klasse = Age Group,
+alpha_0 = hyperparameter alpha, beta_0= hyperparameter beta,MH_algorithm = checks if running MH algo, 
+Bayes_Estimate = checks if conjugation posterior should be computed,, n.sims = number of simulations,
+time.stamp = whether a specific time frame is desired, Zeitpunkt = End data of desired frame, 
+Zeitpunkt_Anfang = Start date of desired frame, beta = calculate for beta prior, uniform = Calculate
+uniform prior if TRUE
+
+
+
 ```{r}
 estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse, 
                        Landkreise = FALSE,Landkreis_Klasse,
