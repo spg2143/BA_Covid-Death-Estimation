@@ -6,7 +6,8 @@ output:
     df_print: paged
 ---
 
-
+This script shows not only the Bootstrap Comparison and but also 
+the conjugation estimate as the function will tell
 
 ```{r,echo=TRUE,eval=T}
 
