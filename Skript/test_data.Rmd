@@ -7,6 +7,7 @@ output:
   pdf_document: default
 ---
 
+This script is important for Age Group specific estimation in time windows
 The next steps cleans the data and creates homogenous datasets
 
 ```{r, echo=TRUE}
