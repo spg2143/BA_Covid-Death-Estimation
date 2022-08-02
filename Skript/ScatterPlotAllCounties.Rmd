@@ -156,7 +156,7 @@ for (i in 1:5){
 
 
 ```
-```{r, echo=TRUE, eval=FALSE}
+```{r, echo=TRUE, eval=TRUE}
 # with high prior
 top_counties2 <- data$GEN[order(diff2, decreasing = T)[1:5]]
 
