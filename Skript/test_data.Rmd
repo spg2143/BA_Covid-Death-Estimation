@@ -6,6 +6,9 @@ output:
   html_document: default
   pdf_document: default
 ---
+
+The next steps cleans the data and creates homogenous datasets
+
 ```{r, echo=TRUE}
 
 library(readxl)
@@ -113,6 +116,8 @@ comparison_frame <- data.frame(bayesestimate = bayes_estimate,
                                ratio = d_ratios, cases = X_sum) 
 
 ```
+Comparison frame is the frame including the deaths and cases for the 
+specfic characteristic
 
 ```{r, echo=TRUE}
 require(ggplot2)
