@@ -51,6 +51,8 @@ estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse,
 
   frame <- frame[,c(5,10,11)]
   
+  #prepare the frame and select the given time window
+  
   time_frame <- as.Date(frame[,1])  
   if(time.stamp){
     zeitpunkt_ende <- rev(time_frame)[1]
