@@ -158,7 +158,7 @@ estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse,
 ```
 
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 estimation(Bundeslaender = T, Bundesland_Klasse = "Hamburg",
            Alter_Klasse = "A60-A79", alpha_0 = 4, beta_0 = 40,
            Zeitpunkt = "2020-05-06", Geschlechts_Klasse = "M", 
