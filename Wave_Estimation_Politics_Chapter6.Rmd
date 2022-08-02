@@ -1,0 +1,229 @@
+---
+title: "Political Evaluation CHhapter 6"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+Data <- read.csv(file = "Data.csv", header = TRUE, sep = ",", dec = ".")
+
+
+n.states <- c("Schleswig-Holstein", "Hamburg","Niedersachsen","Bremen",
+              "NRW","Hessen","Rheinland-Pfalz","Baden-Württemberg","Bayern","Saarland",
+              "Berlin","Brandenburg","M-Vorpommern","Sachsen","Sachsen-Anhalt","Thüringen")
+
+n.age <- c("A00-A04", "A05-A14", "A15-A34", "A35-A59", "A60-A79", "A80+")
+gender <- c("M", "W", "unbekannt")
+
+Data$Refdatum = as.Date(Data$Ref, format = "%Y-%m-%d")
+
+```
+
+
+```{r}
+estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse, 
+                       Landkreise = FALSE,Landkreis_Klasse,
+                       Geschlechts_Klasse, Alter_Klasse, alpha_0, beta_0,
+                       MH_algorithm = TRUE, Bayes_Estimate = TRUE, 
+                       n.sims = 1000, time.stamp, Zeitpunkt, Zeitpunkt_Anfang){
+  
+  #####set prior distribution
+  
+  expected_prior <- alpha_0/(alpha_0 + beta_0)
+  
+  ##prior is set as defined distribution which will be drawn from random
+  
+  if(Bundeslaender){
+    frame <- data[(data$Bundesland == Bundesland_Klasse),]
+  }
+  if(Landkreise){
+    frame <- data[(data$IdLandkreis == Landkreis_Klasse),]
+  }
+  frame <- frame[(frame$Geschlecht == Geschlechts_Klasse),]
+  
+  frame <- frame[(frame$Altersgruppe == Alter_Klasse),]
+
+  frame <- frame[,c(5,10,11)]
+  
+  time_frame <- as.Date(frame[,1])  
+  if(time.stamp){
+    zeitpunkt_ende <- rev(time_frame)[1]
+    zeitpunkt_anfang_daten <- time_frame[1]
+    zeitpunkt_neu = as.Date(Zeitpunkt)
+    zeitpunkt_anfang <- as.Date(Zeitpunkt_Anfang)
+    
+    if(sum(time_frame == zeitpunkt_neu, na.rm = T) == 0){
+      while(sum(time_frame == zeitpunkt_neu, na.rm = T) == 0){
+          zeitpunkt_neu <- zeitpunkt_neu +1
+          zeitpunkt_neu <- as.Date(zeitpunkt_neu)
+      }
+    }  
+    if(zeitpunkt_anfang < zeitpunkt_anfang_daten){
+      while(zeitpunkt_anfang < zeitpunkt_anfang_daten){
+          zeitpunkt_anfang <- zeitpunkt_anfang +1
+          zeitpunkt_anfang <- as.Date(zeitpunkt_anfang)
+      }
+    }
+    if(sum(time_frame == zeitpunkt_anfang, na.rm = T) == 0){
+      while(sum(time_frame == zeitpunkt_anfang, na.rm = T) == 0){
+          zeitpunkt_anfang <- zeitpunkt_anfang +1
+          zeitpunkt_anfang <- as.Date(zeitpunkt_anfang)
+      }
+    }  
+    start_date <- rev(which(time_frame %in% zeitpunkt_anfang))[1]
+    end_date <- rev(which(time_frame %in% zeitpunkt_neu))[1]
+    end_date_data <- rev(which(time_frame %in% zeitpunkt_ende))[1]
+    
+  
+    if(zeitpunkt_ende < zeitpunkt_neu){
+      frame <- frame[start_date:end_date_data ,]
+    }
+    else{
+    frame <- frame[start_date:end_date ,]
+    }
+  }
+  else{
+    frame <- frame[1:end_date_data ,]
+  }
+  
+  specific_data <- apply(frame[,2:3], 2, sum)
+  ratio <- specific_data[2]/specific_data[1]
+  
+  ##build the data respective binomial distribution
+  
+  data_distribution <- c(rep(0, specific_data[1]), rep(1, specific_data[2]))
+
+  ##### Bayes estimation -- no MH
+  
+  if(Bayes_Estimate){
+    alpha_bayes <- specific_data[2] + alpha_0
+    beta_bayes <- specific_data[1] + beta_0
+    bayes_estimate <- alpha_bayes/(alpha_bayes + beta_bayes)
+  }
+
+  ####MCMC 
+  theta_vec <- NULL
+    
+  if(MH_algorithm){
+  
+    theta_0 <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0)
+    theta_vec <- rep(0, n.sims+1) #create posterior vector
+    theta_vec[1] <- theta_0 #initialize posterior vector
+    
+    for (t in 1:n.sims){
+      
+      theta_star <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0) #proposal from prior    
+      theta_t <- theta_vec[t] #previous accepted value for posterior  
+      
+      #Create MH-Ratio using log-likelihoods and taking the inverse of each likelihood
+      #to penalize higher negative values as outcomes with a smaller likelihood    
+        
+      MH_Ratio <- sum(dbinom(data_distribution, size = 1, log = T, prob = theta_t))/
+        sum(dbinom(data_distribution, size = 1, log = T, prob = theta_star)) 
+       
+      #sample with MH ratio
+      
+      mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+      
+      theta_vec[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+    }  
+    mh_estimate <- mean(theta_vec)
+    quantiles <- quantile(theta_vec, probs = c(0.1,0.9))
+    #par(mfrow = c(2,2))
+ 
+    h <- hist(theta_vec[(0.3*n.sims):n.sims], plot = F, breaks = 10)
+    cols <- c(0, 4, 0)
+    k<- cols[findInterval(h$mids, quantile(theta_vec, probs = c(0.1,0.9)),
+                          rightmost.closed=T, all.inside=F)+1]
+    plot(h, col = k, main = paste("Histogram of posterior vector", Bundesland_Klasse), 
+         xlab = "Values of Theta Vector", xlim = c(0,0.3))
+  }
+ 
+  return(list(quantiles = quantiles, estimate = mean(theta_vec), ratio = ratio))
+}
+
+```
+
+## Function description
+
+The function will find the nearest exact dates, if the dataset does not allow
+the selection of that time point.Uses MH Algorithm. Returns quantiles and
+estimate. 
+
+Age Group = A80+
+State = Rheinland-Pfalz
+
+## Estimation during the second wave from 01.03.2020 - 06.05.2021
+
+Pandemic was declared 11.03.2020
+
+```{r}
+
+
+W1 <- estimation(Bundesland_Klasse = "Rheinland-Pfalz", Geschlechts_Klasse = "M", 
+           Alter_Klasse = "A80+", alpha_0 = 4, beta_0 = 40, time.stamp = TRUE,
+           Zeitpunkt_Anfang = "2020-03-01",Zeitpunkt = "2020-05-06", n.sims = 1000)
+
+```
+
+
+## Estimation during the first down-phase from 07.05.2020 - 26.09.2020
+
+```{r}
+
+D1 <- estimation(Bundesland_Klasse = "Rheinland-Pfalz", Geschlechts_Klasse = "M", 
+           Alter_Klasse = "A80+", alpha_0 = 4, beta_0 = 40, time.stamp = TRUE,
+           Zeitpunkt_Anfang = "2020-05-07",Zeitpunkt = "2020-09-26", n.sims = 1000)
+
+
+```
+
+## Estimation during the second wave from 27.09.2020 - 27.02.2021
+
+```{r}
+
+W2 <- estimation(Bundesland_Klasse = "Rheinland-Pfalz", Geschlechts_Klasse = "M", 
+           Alter_Klasse = "A80+", alpha_0 = 4, beta_0 = 40, time.stamp = TRUE,
+           Zeitpunkt_Anfang = "2020-09-27",Zeitpunkt = "2021-02-27", n.sims = 1000)
+
+```
+
+## Estimation during the third wave from 28.02.2021 - 26.05.2021
+
+```{r}
+
+W3 <- estimation(Bundesland_Klasse = "Rheinland-Pfalz", Geschlechts_Klasse = "M", 
+           Alter_Klasse = "A80+", alpha_0 = 4, beta_0 = 40, time.stamp = TRUE,
+           Zeitpunkt_Anfang = "2021-02-28",Zeitpunkt = "2021-05-26", n.sims = 1000)
+
+
+
+```
+
+
+```{r}
+
+estimates_MH <- c(W1$estimate, D1$estimate, W2$estimate, W3$estimate)
+ratios <- c(W1$ratio, D1$ratio, W2$ratio, W3$ratio)
+differene <- ratios - estimates_MH
+
+comp_frame <- data.frame(estimates_MH, ratios, differene)
+
+#xtable(comp_frame, digits = 4)
+
+plot(1:4, estimates_MH, type = "l", col = "red", ylim = c(0.085, 0.12), axes = F, 
+     xlab = "Phases", ylab = "Prob", main = "Course of Probs and Ratios")
+legend(x = "bottomright", legend = c("Estimate MH", "Ratio"), lty = c(1,1), col = c("red", "blue"))
+axis(1, at = 1:4, labels = c("Wave1","Down1","Wave2", "Wave3"))
+axis(2)
+lines(1:4, ratios, col = "blue")
+segments(x0 = 1, y0 = estimates_MH[1], x1 = 1, y1 = ratios[1], lty = 2, lwd = .8, col = "gray")
+segments(x0 = 2, y0 = estimates_MH[2], x1 = 2, y1 = ratios[2], lty = 2, lwd = .8, col = "gray")
+segments(x0 = 3, y0 = estimates_MH[3], x1 = 3, y1 = ratios[3], lty = 2, lwd = .8, col = "gray")
+segments(x0 = 4, y0 = estimates_MH[4], x1 = 4, y1 = ratios[4], lty = 2, lwd = .8, col = "gray")
+```
+
+

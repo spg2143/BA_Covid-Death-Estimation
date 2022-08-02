@@ -1,0 +1,218 @@
+---
+title: "Scatter Plot All Counties"
+author: "Shreyas Gupta"
+date: '2022-07-29'
+output:
+  pdf_document: default
+  html_document: default
+---
+Setup for data and estimation
+
+```{r, echo=TRUE, eval=T}
+
+data <- read.csv(file = "RKI_Corona_Landkreise.csv", header = TRUE,sep = ",", dec = ".")
+
+data.est = data.frame(data$GEN, data$deaths, data$cases)
+data.est[,4] = data.est[,2]/data.est[,3]
+colnames(data.est) = c("county", "deaths", "cases", "ratio")
+
+##setting prior parameters such that estimates for only prior lie around either
+## 0.2-0.9 --> experience actual shift in estimate
+
+alpha_small <- 5
+beta_small <- 10
+
+alpha_big <- 20
+beta_big <- 2
+
+alpha_small_bayes <- data.est$deaths + alpha_small
+beta_small_bayes <- data.est$cases + alpha_small + beta_small
+
+alpha_big_bayes <- data.est$deaths + alpha_big
+beta_big_bayes <- data.est$cases + alpha_big + beta_big
+
+data.est[,5] <- alpha_big_bayes
+data.est[,6] <- beta_big_bayes
+
+data.est[,7] <- alpha_big_bayes
+data.est[,8] <- beta_big_bayes
+
+bayes_estimate1 = (data.est$deaths + alpha_small)/
+  (data.est$cases+ alpha_small + beta_small)
+bayes_estimate2 = (data.est$deaths + alpha_big)/
+  (data.est$cases+ alpha_big + beta_big)
+
+data.est[,9] = bayes_estimate1
+data.est[,10] = bayes_estimate2
+
+colnames(data.est) = c("county", "deaths", "cases", "ratio", 
+                       "alpha_small_bayes","beta_small_bayes","alpha_big_bayes"
+                       ,"beta_big_bayes", "bayes1", "bayes2")
+
+diff1 = log(abs(data.est$ratio - data.est$bayes1))
+diff2 = log(abs(data.est$ratio - data.est$bayes2))
+
+
+
+```
+
+
+
+Understanding the reasoning behind selection of higher deviating states
+```{r, echo=TRUE, eval=T}
+
+hist(diff1)
+hist(diff2)
+
+```
+
+Selecting all diffs in 1 from: < -10 or > -8.5 and diffs in 2: < -9 or > -7
+in log values 
+
+Plotting the output
+
+```{r, echo=TRUE, eval=T}
+
+require(gridExtra)
+require(ggplot2)
+
+gg1 <- ggplot(data = data.est[diff1< -10|diff1> -8.5,])+
+  geom_point(mapping = aes(log(ratio), log(bayes1), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "Counties with Higher deviations", fill = "N log cases") 
+
+gg2 <- ggplot(data = data.est)+
+  geom_point(mapping = aes(log(ratio), log(bayes1), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "All Counties and Cities", fill = "N log cases")
+
+gg3 <- ggplot(data = data.est[diff2< -9|diff2> -7,])+
+  geom_point(mapping = aes(log(ratio), log(bayes2), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "Counties with Higher deviations", fill = "N log cases") 
+
+gg4 <- ggplot(data = data.est)+
+  geom_point(mapping = aes(log(ratio), log(bayes2), colour = log(cases)))+
+  theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+  labs(title = "All Counties and Cities", fill = "N log cases")
+
+grid.arrange(gg1, gg2, gg3, gg4 ,ncol=2, nrow = 2)
+
+```
+
+Counties with the highest differences: 
+
+```{r, echo=TRUE, eval=T}
+data$GEN[order(diff1, decreasing = T)[1:5]]
+counties_top <- data.frame(data$GEN[order(diff2, decreasing = T)[1:15]],
+                           data$BL[order(diff2, decreasing = T)[1:15]])
+colnames(counties_top) <- c("County", "State")
+counties_top
+
+data$cases[order(diff1, decreasing = T)[1:5]]
+mean(data$cases)
+
+
+log_order <- log(order(diff1, decreasing = T)[1:5])
+d1 <- data.est$bayes1[order(diff1, decreasing = T)[1:5]]
+d2 <- data.est$bayes2[order(diff2, decreasing = T)[1:5]]
+d3 <- data.est$ratio[order(diff1, decreasing = T)[1:5]]
+d4 <- data.est$ratio[order(diff2, decreasing = T)[1:5]]
+d5 <- data.est$alpha_small_bayes[order(diff1, decreasing = T)[1:5]]
+d6 <- data.est$beta_small_bayes[order(diff1, decreasing = T)[1:5]]
+d7 <- data.est$alpha_big_bayes[order(diff2, decreasing = T)[1:5]]
+d8 <- data.est$beta_big_bayes[order(diff2, decreasing = T)[1:5]]
+
+
+
+df <- data.frame(d1,d3,d5,d6,d2,d4,d7,d8, log_order)
+colnames(df) <- c("bayes_1", "ratio","alpha1","beta1",
+                  "bayes_2", "ratio","alpha2","beta2", "log_difference")
+df
+
+
+
+
+
+```
+
+Presenting the posterior quantiles for the counties with the highest deviation
+
+
+```{r, echo=TRUE, eval=T}
+##small beta prior
+
+for (i in 1:5){  
+  print(quantile(dbeta(seq(0,0.02, le = 10000), shape1 = df[i,3], 
+                       shape2 = df[i,4]), probs = c(0.25,0.75)))
+}
+
+##big beta prior
+
+for (i in 1:5){  
+  print(quantile(dbeta(seq(0,0.02, le = 100), shape1 = df[i,7], shape2 = df[i,8]),
+           probs = c(0.35,0.65)))
+}
+
+
+```
+```{r, echo=TRUE, eval=FALSE}
+# with high prior
+top_counties2 <- data$GEN[order(diff2, decreasing = T)[1:5]]
+
+cases_top_deviate <- data.est$cases[order(diff2, decreasing = T)[1:5]]
+death_top_deviate <- data.est$deaths[order(diff2, decreasing = T)[1:5]]
+bayes_top_deviate <- data.est$bayes2[order(diff2, decreasing = T)[1:5]]
+ratio_top_deviate <- data.est$deaths[order(diff2, decreasing = T)[1:5]]/
+  data.est$cases[order(diff2, decreasing = T)[1:5]]
+
+fraction_data_importance <- ((cases_top_deviate/
+                            (alpha_big + beta_big + cases_top_deviate))*
+                       (death_top_deviate/cases_top_deviate))/bayes_top_deviate
+  
+fraction_prior_importance <- (((alpha_big + beta_big)/
+                              (alpha_big + beta_big + cases_top_deviate))*
+                              (alpha_big/(alpha_big + beta_big)))/bayes_top_deviate
+  
+
+
+fraction_data_importance
+fraction_prior_importance
+
+
+##create prior-evidence exchange for estimation
+
+df_interaction <- data.frame(row.names = top_counties2, fraction_data_importance, 
+                             fraction_prior_importance, cases_top_deviate,
+                             death_top_deviate) 
+colnames(df_interaction) <- c("Evidence-Importance", "Prior Importance",
+                              "Cases", "Deaths")
+df_interaction
+
+
+df_paper <- df[,5:9]
+rownames(df_paper) <- top_counties2
+colnames(df_paper) <- c("Bayes Estimate", "Death Ratio", 
+                        "Alpha Bayes", "Beta Bayes", "Log-Differences")
+
+
+top_counties_10 <- data.frame(data$GEN[order(diff2, decreasing = T)[1:10]],
+                              data$BL[order(diff2, decreasing = T)[1:10]])
+colnames(top_counties_10) <- c("County",  "State")
+
+#require(xtable)
+#xtable(df_interaction)
+#xtable(df_paper, digits = 4)
+#xtable(top_counties_10)
+
+
+importance <- data.frame(data$GEN[order(diff2, decreasing = T)[1:100]],
+                         data$BL[order(diff2, decreasing = T)[1:100]])
+colnames(importance) <- c("County", "State")
+sum(importance$State=="Rheinland-Pfalz")/100
+#23% of the data entries with the highest bayesian differences
+#are from Rheinland-Pfalz therefore it seems sensible to lead with that state
+
+
+```
+

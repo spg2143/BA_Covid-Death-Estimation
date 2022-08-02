@@ -1,0 +1,184 @@
+---
+title: "Different-Likelihood-Poisson"
+author: "Shreyas Gupta"
+date: '2022-07-29'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, echo=TRUE, eval=T}
+
+Data <- read.csv(file = "Data.csv", header = TRUE, sep = ",", dec = ".")
+
+
+n.states <- c("Schleswig-Holstein", "Hamburg","Niedersachsen","Bremen",
+              "NRW","Hessen","Rheinland-Pfalz","Baden-Württemberg","Bayern","Saarland",
+              "Berlin","Brandenburg","M-Vorpommern","Sachsen","Sachsen-Anhalt","Thüringen")
+
+n.age <- c("A00-A04", "A05-A14", "A15-A34", "A35-A59", "A60-A79", "A80+")
+gender <- c("M", "W", "unbekannt")
+
+Data$Refdatum = as.Date(Data$Ref, format = "%Y-%m-%d")
+```
+
+
+```{r, echo=TRUE, eval=T}
+
+estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse, 
+                       Landkreise = FALSE,Landkreis_Klasse,Geschlechts_Klasse, 
+                       Alter_Klasse, alpha_0, beta_0, MH_algorithm = TRUE,
+                       n.sims = 1000, time.stamp, Zeitpunkt){
+  
+  #####set prior distribution
+  
+  expected_prior <- alpha_0/(alpha_0 + beta_0)
+  
+  ##prior is set as defined distribution which will be drawn from random
+  
+  if(Bundeslaender){
+    frame <- data[(data$Bundesland == Bundesland_Klasse),]
+  }
+  if(Landkreise){
+    frame <- data[(data$IdLandkreis == Landkreis_Klasse),]
+  }
+  frame <- frame[(frame$Geschlecht == Geschlechts_Klasse),]
+  
+  frame <- frame[(frame$Altersgruppe == Alter_Klasse),]
+
+  frame <- frame[,c(5,10,11)]
+  
+  time_frame <- as.Date(frame[,1])  
+  if(time.stamp){
+    zeitpunkt_ende <- rev(time_frame)[1]
+    zeitpunkt_neu = as.Date(Zeitpunkt)
+    pos <- rev(which(time_frame %in% as.Date(zeitpunkt_ende, 
+                                                 format = "%Y-%m-%d")))[1]
+    if(zeitpunkt_ende < zeitpunkt_neu){
+      frame <- frame[1:pos ,]
+    }
+    else{
+      while(sum(frame$Refdatum == Zeitpunkt, na.rm = T) == 0){
+        zeitpunkt_neu <- zeitpunkt_neu +1
+        zeitpunkt_neu <- as.Date(zeitpunkt_neu)
+     }
+    end_date <- rev(which(time_frame %in% zeitpunkt_neu))[1]
+    frame <- frame[1:end_date ,]
+    }
+  }
+  else{
+    zeitpunkt_ende <- rev(time_frame)[1]
+    pos <- rev(which(time_frame %in% as.Date(zeitpunkt_ende, 
+                                                 format = "%Y-%m-%d")))[1]
+    frame <- frame[1:pos ,]
+  }
+  
+  specific_data <- apply(frame[,2:3], 2, sum)
+  ratio <- specific_data[2]/specific_data[1]
+  
+  ##build the data respective data
+  
+  data_distribution <- c(rep(0, specific_data[1]), rep(1, specific_data[2]))
+
+  ####MCMC 
+  theta_vec1 <- NULL
+    
+  if(MH_algorithm){
+  
+    theta_0 <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0)
+    theta_vec1 <- rep(0, n.sims+1) #create posterior vector
+    theta_vec1[1] <- theta_0 #initialize posterior vector
+    
+    for (t in 1:n.sims){
+      
+      theta_star <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0) #proposal from prior    
+      theta_t <- theta_vec1[t] #previous accepted value for posterior  
+      
+      #Create MH-Ratio using log-likelihoods and taking the inverse of each likelihood
+      #to penalize higher negative values as outcomes with a smaller likelihood
+      
+      MH_Ratio <- sum(dpois(x = data_distribution, lambda = specific_data[1]*theta_t, log = T))/
+  sum(dpois(x = data_distribution, lambda = specific_data[1]*theta_star, log = T)) 
+       
+      #sample with MH ratio
+      
+      mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+      
+      theta_vec1[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+    }  
+    mean_pois <- mean(theta_vec1)
+    quantiles1 <- quantile(theta_vec1, probs = c(0.1,0.9))
+    #par(mfrow = c(2,2))
+ 
+    h1 <- hist(theta_vec1[(0.3*n.sims):n.sims], plot = F, breaks = 9)
+    cols <- c(0, 4, 0)
+    k1<- cols[findInterval(h1$mids, quantile(theta_vec1, probs = c(0.1,0.9)),
+                          rightmost.closed=T, all.inside=F)+1]
+  }
+
+  theta_vec2 <- NULL
+    
+  if(MH_algorithm){
+  
+    theta_0 <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0)
+    theta_vec2 <- rep(0, n.sims+1) #create posterior vector
+    theta_vec2[1] <- theta_0 #initialize posterior vector
+    
+    for (t in 1:n.sims){
+      
+      theta_star <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0) #proposal from prior    
+      theta_t <- theta_vec2[t] #previous accepted value for posterior  
+      
+      #Create MH-Ratio using log-likelihoods and taking the inverse of each likelihood
+      #to penalize higher negative values as outcomes with a smaller likelihood
+      
+      MH_Ratio <- sum(dbinom(x = data_distribution, prob = theta_t, log = T, size = 1))/
+  sum(dbinom(x = data_distribution, prob = theta_star, log = T, size = 1)) 
+       
+      #sample with MH ratio
+      
+      mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+      
+      theta_vec2[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+    }  
+    mean_binom <- mean(theta_vec2)
+    quantiles2 <- quantile(theta_vec2, probs = c(0.1,0.9))
+    #par(mfrow = c(2,2))
+ 
+    h2 <- hist(theta_vec2[(0.3*n.sims):n.sims], plot = F, breaks = 9)
+    cols <- c(0, 4, 0)
+    k2<- cols[findInterval(h2$mids, quantile(theta_vec2, probs = c(0.1,0.9)),
+                          rightmost.closed=T, all.inside=F)+1]
+    
+  }  
+  
+  par(mfrow = c(2,2))
+  plot(h1, col = k1, main = paste("Poisson: Posterior vector", Bundesland_Klasse), 
+         xlab = "Values of Theta Vector",  xlim = c(0,0.2))
+  plot(h2, col = k2, main = paste("Binomial: Posterior vector", Bundesland_Klasse), 
+         xlab = "Values of Theta Vector", xlim = c(0,0.2))
+  plot(theta_vec1[(0.3*n.sims):n.sims], type = "l", ylab = "Mixing",
+         main = "Mixing of posterior values")
+  plot(theta_vec2[(0.3*n.sims):n.sims], type = "l", ylab = "Mixing",
+         main = "Mixing of posterior values")
+  
+  return(list(mean = c(mean_pois, mean_binom), prior_exp = expected_prior, ratio = ratio))
+  
+}
+  
+
+```
+
+
+
+
+
+```{r, echo=TRUE, eval=T}
+
+
+estimation(Bundesland_Klasse = "NRW", Alter_Klasse = "A35-A59",alpha_0 = 4
+            ,beta_0 = 50, time.stamp = TRUE, Zeitpunkt = "2021-01-21",
+           Geschlechts_Klasse = "W")
+
+
+```
