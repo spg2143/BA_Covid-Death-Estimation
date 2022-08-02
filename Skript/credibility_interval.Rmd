@@ -6,6 +6,11 @@ output:
 ---
 
 
+This Rmd file consists of the code for computing every
+posterior outcome from gender and state. Computation takes
+time and the relevant credibility interval is in 
+regions_ages_estimation.Rmd
+
 ```{r}
 
 Data <- read.csv(file = "Data.csv", header = TRUE, sep = ",", dec = ".")
@@ -160,7 +165,7 @@ estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse,
 
 Showing credible intervals for each state
 
-```{r}
+```{r, eval=FALSE}
 
 for(gender in gender){  
   for (states in n.states){
