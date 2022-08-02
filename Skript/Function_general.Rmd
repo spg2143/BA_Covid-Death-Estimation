@@ -1,0 +1,168 @@
+---
+title: "Function"
+author: "Shreyas Gupta"
+date: '2022-08-02'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+
+Data <- read.csv(file = "Data.csv", header = TRUE, sep = ",", dec = ".")
+
+
+n.states <- c("Schleswig-Holstein", "Hamburg","Niedersachsen","Bremen",
+              "NRW","Hessen","Rheinland-Pfalz","Baden-Württemberg","Bayern","Saarland",
+              "Berlin","Brandenburg","M-Vorpommern","Sachsen","Sachsen-Anhalt","Thüringen")
+
+n.age <- c("A00-A04", "A05-A14", "A15-A34", "A35-A59", "A60-A79", "A80+")
+gender <- c("M", "W", "unbekannt")
+
+Data$Refdatum = as.Date(Data$Ref, format = "%Y-%m-%d")
+```
+
+```{r}
+estimation <- function(data = Data, Bundeslaender = TRUE, Bundesland_Klasse, 
+                       Landkreise = FALSE,Landkreis_Klasse,
+                       Geschlechts_Klasse, Alter_Klasse, alpha_0, beta_0,
+                       MH_algorithm = TRUE, Bayes_Estimate = TRUE, 
+                       n.sims = 1000, time.stamp, Zeitpunkt, Zeitpunkt_Anfang,
+                       beta = T, uniform = F, margins){
+  
+  #####set prior distribution
+  
+  expected_prior <- alpha_0/(alpha_0 + beta_0)
+  
+  ##prior is set as defined distribution which will be drawn from random
+  
+  if(Bundeslaender){
+    frame <- data[(data$Bundesland == Bundesland_Klasse),]
+  }
+  if(Landkreise){
+    frame <- data[(data$IdLandkreis == Landkreis_Klasse),]
+  }
+  frame <- frame[(frame$Geschlecht == Geschlechts_Klasse),]
+  
+  frame <- frame[(frame$Altersgruppe == Alter_Klasse),]
+  
+  frame <- frame[,c(5,10,11)]
+  
+  time_frame <- as.Date(frame[,1])  
+  if(time.stamp){
+    zeitpunkt_ende <- rev(time_frame)[1]
+    zeitpunkt_anfang_daten <- time_frame[1]
+    zeitpunkt_neu = as.Date(Zeitpunkt)
+    zeitpunkt_anfang <- as.Date(Zeitpunkt_Anfang)
+    
+    if(sum(time_frame == zeitpunkt_neu, na.rm = T) == 0){
+      while(sum(time_frame == zeitpunkt_neu, na.rm = T) == 0){
+        zeitpunkt_neu <- zeitpunkt_neu +1
+        zeitpunkt_neu <- as.Date(zeitpunkt_neu)
+      }
+    }  
+    if(zeitpunkt_anfang < zeitpunkt_anfang_daten){
+      while(zeitpunkt_anfang < zeitpunkt_anfang_daten){
+        zeitpunkt_anfang <- zeitpunkt_anfang +1
+        zeitpunkt_anfang <- as.Date(zeitpunkt_anfang)
+      }
+    }
+    if(sum(time_frame == zeitpunkt_anfang, na.rm = T) == 0){
+      while(sum(time_frame == zeitpunkt_anfang, na.rm = T) == 0){
+        zeitpunkt_anfang <- zeitpunkt_anfang +1
+        zeitpunkt_anfang <- as.Date(zeitpunkt_anfang)
+      }
+    }  
+    start_date <- rev(which(time_frame %in% zeitpunkt_anfang))[1]
+    end_date <- rev(which(time_frame %in% zeitpunkt_neu))[1]
+    end_date_data <- rev(which(time_frame %in% zeitpunkt_ende))[1]
+    
+    
+    if(zeitpunkt_ende < zeitpunkt_neu){
+      frame <- frame[start_date:end_date_data ,]
+    }
+    else{
+      frame <- frame[start_date:end_date ,]
+    }
+  }
+
+  
+  specific_data <- apply(frame[,2:3], 2, sum)
+  ratio <- specific_data[2]/specific_data[1]
+  
+  ##build the data respective binomial distribution
+  
+  data_distribution <- c(rep(0, specific_data[1]), rep(1, specific_data[2]))
+  
+  ##### Bayes estimation -- no MH
+  
+  if(Bayes_Estimate){
+    alpha_bayes <- specific_data[2] + alpha_0
+    beta_bayes <- specific_data[1] + beta_0
+    bayes_estimate <- alpha_bayes/(alpha_bayes + beta_bayes)
+  }
+  
+  ####MCMC 
+  theta_vec <- NULL
+  
+  if(MH_algorithm){
+      
+    if(beta){
+      theta_0 <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0)
+    }
+    if(uniform){
+      theta_0 <- runif(0,0.5,n = 1)
+    }  
+    theta_vec <- rep(0, n.sims+1) #create posterior vector
+    theta_vec[1] <- theta_0 #initialize posterior vector
+    
+    for (t in 1:n.sims){
+      
+      if(beta){
+        theta_star <- rbeta(n = 1, shape1 = alpha_0, shape2 = beta_0)
+      }
+      if(uniform){
+        theta_star <- runif(0,0.5,n = 1)
+      }  
+      
+      #proposal from prior    
+      theta_t <- theta_vec[t] #previous accepted value for posterior  
+      
+      #Create MH-Ratio using log-likelihoods and taking the inverse of each likelihood
+      #to penalize higher negative values as outcomes with a smaller likelihood    
+      
+      MH_Ratio <- sum(dbinom(data_distribution, size = 1, log = T, prob = theta_t))/
+        sum(dbinom(data_distribution, size = 1, log = T, prob = theta_star)) 
+      
+      #sample with MH ratio
+      
+      mh_prob <- c(min(1,MH_Ratio), 1-min(1,MH_Ratio))
+      
+      theta_vec[t+1] <- sample(x = c(theta_star, theta_t),size = 1,prob = mh_prob)              
+    }  
+    mh_estimate <- mean(theta_vec)
+    quantiles <- quantile(theta_vec, probs = c(0.1,0.9))
+    #par(mfrow = c(2,2))
+    
+    h <- hist(theta_vec[(0.3*n.sims):n.sims], plot = F, breaks = 10)
+    cols <- c(0, 4, 0)
+    k<- cols[findInterval(h$mids, quantile(theta_vec, probs = c(0.1,0.9)),
+                          rightmost.closed=T, all.inside=F)+1]
+    plot(h, col = k, main = paste("Histogram of posterior vector", Bundesland_Klasse), 
+         xlab = "Values of Theta Vector", xlim = c(0,margins))
+  }
+  
+  return(list(quantiles = quantiles, estimate = mean(theta_vec), ratio = ratio))
+}
+
+```
+
+
+```{r, eval=FALSE}
+estimation(Bundeslaender = T, Bundesland_Klasse = "Hamburg",
+           Alter_Klasse = "A60-A79", alpha_0 = 4, beta_0 = 40,
+           Zeitpunkt = "2020-05-06", Geschlechts_Klasse = "M", 
+           time.stamp = T, n.sims = 1000, Zeitpunkt_Anfang = "2021-01-21",
+           beta = F , uniform = T, margins = 0.5)
+```
+
