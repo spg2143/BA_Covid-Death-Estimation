@@ -26,10 +26,10 @@ alpha_big <- 20
 beta_big <- 2
 
 alpha_small_bayes <- data.est$deaths + alpha_small
-beta_small_bayes <- data.est$cases + alpha_small + beta_small
+beta_small_bayes <- data.est$cases - data.est$death + beta_small
 
 alpha_big_bayes <- data.est$deaths + alpha_big
-beta_big_bayes <- data.est$cases + alpha_big + beta_big
+beta_big_bayes <- data.est$cases - data.est$death + beta_big
 
 data.est[,5] <- alpha_big_bayes
 data.est[,6] <- beta_big_bayes
@@ -38,9 +38,9 @@ data.est[,7] <- alpha_big_bayes
 data.est[,8] <- beta_big_bayes
 
 bayes_estimate1 = (data.est$deaths + alpha_small)/
-  (data.est$cases+ alpha_small + beta_small)
+  (data.est$cases - data.est$deaths + beta_small)
 bayes_estimate2 = (data.est$deaths + alpha_big)/
-  (data.est$cases+ alpha_big + beta_big)
+  (data.est$cases - data.est$deaths + beta_big)
 
 data.est[,9] = bayes_estimate1
 data.est[,10] = bayes_estimate2
