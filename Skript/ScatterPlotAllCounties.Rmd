@@ -72,9 +72,10 @@ in log values
 Plotting the output
 
 ```{r, echo=TRUE, eval=T}
-
-require(gridExtra)
-require(ggplot2)
+install.packages(gridExtra)
+install.packages(ggplot2)
+library(gridExtra)
+library(ggplot2)
 
 gg1 <- ggplot(data = data.est[diff1< -10|diff1> -8.5,])+
   geom_point(mapping = aes(log(ratio), log(bayes1), colour = log(cases)))+
